@@ -1,66 +1,70 @@
-// shell.c
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/wait.h>
-
-#define MAX_INPUT_LENGTH 1024
-
-void prompt(void)
-{
-    printf("#cisfun$ ");
-}
+#include "shell.h"
 
 int main(void)
 {
     char input[MAX_INPUT_LENGTH];
     char *command;
     char *args[2];
+    char *full_command;
     pid_t pid;
+    int status;
 
     while (1)
     {
-        prompt();  // Display prompt
-
+        printf("#cisfun$ "); // Display prompt
         if (fgets(input, MAX_INPUT_LENGTH, stdin) == NULL)
         {
-            if (feof(stdin))  // Handle Ctrl+D
+            if (feof(stdin))
             {
                 printf("\n");
-                break;
+                break; // Handle Ctrl+D gracefully
             }
             perror("fgets");
-            exit(EXIT_FAILURE);
+            continue;
         }
 
         // Remove trailing newline
-        input[strcspn(input, "\n")] = 0;
+        input[strcspn(input, "\n")] = '\0';
 
-        // Only handle single commands without arguments
+        if (input[0] == '\0')
+            continue; // Empty input, continue to next prompt
+
         command = strtok(input, " ");
+        if (command == NULL)
+            continue; // Continue if command is empty
+
         args[0] = command;
-        args[1] = NULL;
+        args[1] = NULL; // No arguments in this simple shell
+
+        full_command = find_command_in_path(command);
+        if (full_command == NULL)
+        {
+            fprintf(stderr, "%s: command not found\n", command);
+            continue;
+        }
 
         pid = fork();
         if (pid == -1)
         {
             perror("fork");
-            exit(EXIT_FAILURE);
+            free(full_command);
+            continue;
         }
-        else if (pid == 0)  // Child process
+        else if (pid == 0)
         {
-            if (execve(command, args, NULL) == -1)
+            if (execve(full_command, args, environ) == -1)
             {
-                perror(command);
+                perror(command); // Print error message
+                free(full_command);
                 exit(EXIT_FAILURE);
             }
         }
-        else  // Parent process
+        else
         {
-            wait(NULL);
+            wait(&status);
         }
+
+        free(full_command); // Free the allocated memory for the full command path
     }
 
     return 0;
